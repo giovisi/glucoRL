@@ -1,2 +1,12 @@
 # macOS metadata
 .DS_Store
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Temporary files
+/temp*
+
+# Simulation data (for now)
+Simulation_*
