@@ -1,0 +1,3 @@
+[submodule "simglucose"]
+	path = simglucose
+	url = https://github.com/jxx123/simglucose
