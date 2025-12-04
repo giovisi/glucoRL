@@ -2,11 +2,15 @@
 .DS_Store
 
 # Python cache files
-__pycache__/
+__pycache__/*
 *.py[cod]
 
-# Temporary files
-/temp*
+# VSCode settings
+.vscode/
+
+# Temporary results
+temp_results*
 
 # Simulation data (for now)
 Simulation_*
+ppo_*/

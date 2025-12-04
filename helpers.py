@@ -34,7 +34,7 @@ def plot_comparison(results_dict, patient_id="Unknown", save_path=None):
         print("No data to plot.")
         return
 
-    fig, axes = plt.subplots(n_plots, 1, figsize=(12, 5 * n_plots), sharex=True)
+    fig, axes = plt.subplots(n_plots, 1, figsize=(12, 2.5 * n_plots), sharex=True)
     if n_plots == 1: axes = [axes]
     
     for ax, (name, df) in zip(axes, results_dict.items()):

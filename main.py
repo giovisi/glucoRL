@@ -1,6 +1,3 @@
-import matplotlib.pyplot as plt
-import pandas as pd
-from datetime import datetime, timedelta
 import os
 import sys
 
@@ -10,6 +7,9 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 # Add the *inner* simglucose repo root to sys.path
 SUBMODULE_ROOT = os.path.join(PROJECT_ROOT, "simglucose")
 sys.path.insert(0, SUBMODULE_ROOT)
+
+from datetime import datetime, timedelta
+
 
 # Import the helpers module 
 import helpers

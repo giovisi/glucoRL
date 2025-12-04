@@ -1,3 +1,13 @@
+import os
+import sys
+
+# Project root = folder where main.py lives
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+# Add the *inner* simglucose repo root to sys.path
+SUBMODULE_ROOT = os.path.join(PROJECT_ROOT, "simglucose")
+sys.path.insert(0, SUBMODULE_ROOT)
+
 import gymnasium as gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback
