@@ -35,7 +35,8 @@ def train():
     env_kwargs = {
         'patient_name': patient_id,
         'reward_fun': paper_reward,  # Explicitly use the paper's reward
-        'seed': 42
+        'seed': 42,
+        'max_episode_days': 1  # 1 day = 288 steps (each step = 5 min)
     }
 
     # Parallelization
@@ -53,6 +54,7 @@ def train():
     print("[INFO] Creating evaluation environment...")
     eval_env_kwargs = env_kwargs.copy()
     eval_env_kwargs['seed'] = 123
+    eval_env_kwargs['max_episode_days'] = 1  # Same as training
     eval_env = make_vec_env(
         CustomT1DEnv,
         n_envs=1,
