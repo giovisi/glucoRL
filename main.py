@@ -8,258 +8,164 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 SUBMODULE_ROOT = os.path.join(PROJECT_ROOT, "simglucose")
 sys.path.insert(0, SUBMODULE_ROOT)
 
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta
+import os
 
-
-# Import the helpers module 
 import helpers
-
-# --- Simglucose Imports and Explanations ---
-
-# BBController: Implements the standard "Basal-Bolus" therapy.
-# It delivers a constant background insulin (basal) and calculates large doses (bolus) 
-# for meals based on Carb Ratio (CR) and Correction Factor (CF). We will use this as baseline for comparisons
 from simglucose.controller.basal_bolus_ctrller import BBController
-
-# PIDController: Implements a Proportional-Integral-Derivative control algorithm.
-# It calculates insulin delivery continuously based on the error between 
-# current glucose and the target glucose.
 from simglucose.controller.pid_ctrller import PIDController
-
-# T1DPatient: Loads a virtual patient model based on the FDA-approved UVA/Padova simulator.
-# It contains the differential equations describing how the patient's body metabolizes glucose and insulin.
 from simglucose.patient.t1dpatient import T1DPatient
-
-# CGMSensor: Simulates a Continuous Glucose Monitor.
-# It reads the "true" blood glucose from the patient and adds realistic sensor noise 
-# and time lag before passing it to the controller.
 from simglucose.sensor.cgm import CGMSensor
-
-# InsulinPump: Simulates the hardware device.
-# It receives commands from the controller and ensures insulin delivery limits 
-# and discrete step sizes are respected.
 from simglucose.actuator.pump import InsulinPump
-
-# T1DSimEnv: The "Environment" that connects the Patient, Sensor, and Pump.
-# It follows the OpenAI Gym standard (commonly used in Reinforcement Learning),
-# providing methods like .step() to advance time.
 from simglucose.simulation.env import T1DSimEnv
-
-# CustomScenario: Defines the "world events" for the simulation.
-# Specifically, it sets the time and amount of carbohydrate intake (meals).
 from simglucose.simulation.scenario import CustomScenario
-
-# SimObj & sim: The simulation engine.
-# SimObj wraps the environment and the controller together.
-# sim() is the function that actually runs the loop (time step by time step).
 from simglucose.simulation.sim_engine import SimObj, sim
+from simglucose.controller.base import Action
 
-# --- 1. CONFIGURATION ---
-SIM_DAYS = 1
+from stable_baselines3 import PPO
+from custom_env import CustomT1DEnv 
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+SIM_DAYS = 7 
 PATIENT_ID = 'adolescent#003'
+RL_MODEL_PATH = "ppo_adolescent003_paper_final"  # Points to new paper-based model
+N_TRIALS = 5 
 
-# --- 2. SETUP FUNCTION ---
-# This function creates a fresh environment instance for every simulation.
-# It is crucial to do this because the Patient object holds "state" (current glucose, 
-# active insulin, etc.). If we reuse the same environment for the second controller, 
-# the patient would already be altered by the first simulation.
-def create_env():
-    # 1. Create the Patient
-    # Loads mathematical parameters for specific virtual patients (e.g., 'adolescent#003')
-    patient = T1DPatient.withName(PATIENT_ID)
-    
-    # 2. Create the Sensor
-    # 'Dexcom' is a preset noise model. 'seed' ensures the noise is reproducible.
-    sensor = CGMSensor.withName('Dexcom', seed=1)
-    
-    # 3. Create the Pump
-    # 'Insulet' is a preset pump model (Omnipod) with specific delivery constraints.
-    pump = InsulinPump.withName('Insulet')
-    
-    # 4. Define the Meal Scenario (Breakfast, Lunch, Dinner)
-
-    # datetime.now() gets the current local date and time from your computer's clock.
+# ... (Scenario Generation Logic - No Changes) ...
+def get_extended_scenario(n_days=7):
     now = datetime.now()
-
-    # We want the simulation to start at midnight of the current day.
-    # .date() extracts just the date (YYYY-MM-DD) from 'now'.
-    # .min.time() gives the earliest possible time (00:00:00).
-    # .combine() merges them to create a specific timestamp: Today at Midnight.
     start_time = datetime.combine(now.date(), datetime.min.time())
+    meal_events = []
+    for day in range(n_days):
+        day_offset = timedelta(days=day)
+        breakfast_carbs = np.random.randint(45, 55)
+        lunch_carbs = np.random.randint(65, 75)
+        dinner_carbs = np.random.randint(55, 65)
+        breakfast_time = start_time + day_offset + timedelta(hours=7, minutes=np.random.randint(0, 30))
+        lunch_time = start_time + day_offset + timedelta(hours=12, minutes=np.random.randint(0, 30))
+        dinner_time = start_time + day_offset + timedelta(hours=19, minutes=np.random.randint(0, 30))
+        meal_events.extend([(breakfast_time, breakfast_carbs), (lunch_time, lunch_carbs), (dinner_time, dinner_carbs)])
+    return CustomScenario(start_time=start_time, scenario=meal_events)
 
-    # We use timedelta to define durations (time differences) to schedule meals relative to the start time.
-    meal_events = [
-        # start_time + 30 minutes duration = Breakfast time
-        (start_time + timedelta(minutes=30), 50),
-        
-        # start_time + 4 hours duration = Lunch time
-        (start_time + timedelta(hours=4), 70),
-        
-        # start_time + 10 hours duration = Dinner time
-        (start_time + timedelta(hours=10), 60)
-    ]
-    
-    # CustomScenario creates the schedule based on the list above
-    meal_scenario = CustomScenario(start_time=start_time, scenario=meal_events)
-    
+# ... (Metric and Helper functions - No Changes) ...
+def create_standard_env(scenario):
+    patient = T1DPatient.withName(PATIENT_ID)
+    sensor = CGMSensor.withName('Dexcom', seed=1)
+    pump = InsulinPump.withName('Insulet')
+    return T1DSimEnv(patient, sensor, pump, scenario)
 
-    # 5. Combine everything into the Environment
-    return T1DSimEnv(patient, sensor, pump, meal_scenario)
+def calculate_detailed_metrics(df):
+    BG = df['BG'].values
+    if len(BG) == 0: return None
+    tir = ((BG >= 70) & (BG <= 180)).sum() / len(BG) * 100
+    tbr = (BG < 70).sum() / len(BG) * 100
+    tbr_severe = (BG < 54).sum() / len(BG) * 100
+    tar = (BG > 180).sum() / len(BG) * 100
+    tar_severe = (BG > 250).sum() / len(BG) * 100
+    mean_bg = BG.mean()
+    std_bg = BG.std()
+    cv_bg = (std_bg / mean_bg) * 100 if mean_bg > 0 else 0
+    hbgi = ((np.log(BG[BG > 180]) ** 1.084) - 5.381).sum() / len(BG) if (BG > 180).any() else 0
+    lbgi = ((np.log(BG[BG < 70]) ** 1.084) - 5.381).sum() / len(BG) if (BG < 70).any() else 0
+    return {'TIR (70-180)': tir, 'TBR (<70)': tbr, 'TBR Severe (<54)': tbr_severe, 'TAR (>180)': tar, 'TAR Severe (>250)': tar_severe, 'Mean BG': mean_bg, 'Std BG': std_bg, 'CV%': cv_bg, 'HBGI': hbgi, 'LBGI': lbgi}
 
+def print_metrics_table(results_dict):
+    print("\n" + "="*90 + "\n" + " " * 30 + "COMPARATIVE METRICS" + "\n" + "="*90)
+    header = f"{'Metric':<20}"
+    for name in results_dict.keys(): header += f"{name:>20}"
+    print(header + "\n" + "-"*90)
+    all_metrics = {}
+    for name, df in results_dict.items(): all_metrics[name] = calculate_detailed_metrics(df)
+    metric_names = ['TIR (70-180)', 'TBR (<70)', 'TBR Severe (<54)', 'TAR (>180)', 'TAR Severe (>250)', 'Mean BG', 'CV%']
+    for metric in metric_names:
+        row = f"{metric:<20}"
+        for name in results_dict.keys():
+            value = all_metrics[name][metric]
+            row += f"{value:>20.2f}" if 'BG' in metric else f"{value:>19.2f}%"
+        print(row)
+    print("="*90)
 
-
-
+# ... (Main Loop) ...
 def main():
-    print(f"--- Starting Simulation for {PATIENT_ID} ---")
-
-    # --- 3. CONTROLLER CONFIGURATION ---
+    print(f"\n{'='*90}\n" + " " * 25 + f"GLUCOSE CONTROL EVALUATION\n" + f"{'='*90}")
     
-    # Controller 1: Basal Bolus
-    # This uses standard clinical logic (reactive to meals).
-    bb_controller = BBController()
+    # Aggregate results container
+    all_results = {'Basal-Bolus': [], 'PID': [], 'RL Smart': []}
 
-    # Controller 2: PID
-    # This uses control theory logic (reactive to glucose deviation).
-    # P (Proportional): Reacts to current error (Target - Current BG).
-    # I (Integral): Reacts to accumulation of past errors (handles steady drift).
-    # D (Derivative): Reacts to the rate of change (predicts future trend).
-    # These parameters are generic; optimal values vary per patient.
-    pid_controller = PIDController(
-        P=1.00e-04, 
-        I=1.00e-07, 
-        D=3.98e-03, 
-        target=140
-    )
+    for trial in range(N_TRIALS):
+        print(f"\n[TRIAL {trial+1}/{N_TRIALS}]")
+        np.random.seed(trial * 42)
+        scenario = get_extended_scenario(n_days=SIM_DAYS)
 
+        # 1. BB
+        print("  → Running Basal-Bolus...")
+        bb_controller = BBController()
+        env_bb = create_standard_env(scenario)
+        sim_obj_bb = SimObj(env_bb, bb_controller, timedelta(days=SIM_DAYS), animate=False, path=f'./temp_bb_trial{trial}')
+        results_bb = sim(sim_obj_bb)
+        all_results['Basal-Bolus'].append(results_bb)
 
-    from simglucose.simulation.user_interface import simulate
-    from simglucose.controller.base import Controller, Action
+        # 2. PID
+        print("  → Running PID...")
+        pid_controller = PIDController(P=1.0e-4, I=1.0e-7, D=3.9e-3, target=140)
+        env_pid = create_standard_env(scenario)
+        sim_obj_pid = SimObj(env_pid, pid_controller, timedelta(days=SIM_DAYS), animate=False, path=f'./temp_pid_trial{trial}')
+        results_pid = sim(sim_obj_pid)
+        all_results['PID'].append(results_pid)
 
-    class rlController(Controller):
-        def __init__(self, init_state, target_bg=140, sensitivity=50):
-            """
-            init_state: Initial state (usually 0 or None)
-            target_bg: The glucose level we want to maintain (default 140 mg/dL)
-            sensitivity: How much glucose is lowered by 1 unit of insulin (ISF).
-                         A rough estimate for an adolescent is ~50.
-            """
-            self.init_state = init_state
-            self.state = init_state
-            self.target_bg = target_bg
-            self.sensitivity = sensitivity
-            # A standard basal rate estimate for an adolescent (approx 0.05 U/min)
-            self.constant_basal = 0.05 
+        # 3. RL
+        print("  → Running RL (Smart PPO)...")
+        if not os.path.exists(f"{RL_MODEL_PATH}.zip"):
+            print(f"[ERROR] Modello {RL_MODEL_PATH}.zip non trovato!\nEsegui prima: python train_ppo.py")
+            return
 
-        def policy(self, observation, reward, done, **info):
-            '''
-            A simple heuristic policy:
-            If Glucose > Target, inject corrective bolus.
-            Always inject a constant basal rate.
-            '''
-            self.state = observation
-            
-            # 1. Get current glucose
-            bg_current = observation.CGM
+        env_rl = CustomT1DEnv(patient_name=PATIENT_ID, custom_scenario=scenario)
+        model = PPO.load(RL_MODEL_PATH)
+        obs, _ = env_rl.reset()
+        rl_bg_history = []
+        rl_time_history = []
+        done = False
+        step_count = 0
+        max_steps = SIM_DAYS * 288 
+        
+        while not done and step_count < max_steps:
+            action, _ = model.predict(obs, deterministic=True)
+            obs, reward, done, truncated, info = env_rl.step(action)
+            current_time = env_rl.env.time
+            current_bg = env_rl.env.patient.observation.Gsub
+            rl_bg_history.append(current_bg)
+            rl_time_history.append(current_time)
+            step_count += 1
+            if current_time >= scenario.start_time + timedelta(days=SIM_DAYS): done = True
 
-            # 2. Calculate "Correction Bolus"
-            # Formula: (Current - Target) / Sensitivity
-            if bg_current > self.target_bg:
-                # Example: If BG is 200, Target 140, Sens 50.
-                # Diff = 60. Bolus = 60/50 = 1.2 Units.
-                calculated_bolus = (bg_current - self.target_bg) / self.sensitivity
-            else:
-                calculated_bolus = 0
+        results_rl = pd.DataFrame(data={'BG': rl_bg_history}, index=rl_time_history)
+        all_results['RL Smart'].append(results_rl)
 
-            # 3. Safety: Ensure we don't deliver negative values or crazy high amounts
-            # Limiting to max 5 units per step to prevent death in simulation
-            safe_bolus = min(max(calculated_bolus, 0), 5.0)
+    print("\n[AGGREGATING RESULTS...]")
+    aggregated_results = {}
+    for method, trials in all_results.items():
+        aggregated_results[method] = pd.concat(trials)
 
-            # 4. Return Action
-            # Basal keeps the patient stable; Bolus corrects the highs.
-            return Action(basal=self.constant_basal, bolus=safe_bolus)
+    print_metrics_table(aggregated_results)
 
-        def reset(self):
-            '''
-            Reset the controller state to initial state
-            '''
-            self.state = self.init_state
-
-    rl_controller = rlController(0)
-
-    # --- 4. EXECUTE SIMULATIONS ---
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    folder = f"Results_{timestamp}"
+    os.makedirs(folder, exist_ok=True)
+    print(f"\n[SAVING RESULTS] → {folder}/")
+    for name, df in aggregated_results.items():
+        safe_name = name.replace(" ", "_").lower()
+        file_path = os.path.join(folder, f"{safe_name}.csv")
+        df.to_csv(file_path)
+        print(f"  ✓ {safe_name}.csv")
     
-    # --- Simulation A: Basal Bolus ---
-    print("\nRunning Basal-Bolus Simulation...")
-    env_bb = create_env() # Create fresh environment
-    
-    # SimObj binds the environment (patient) to the controller (brain)
-    sim_obj_bb = SimObj(
-        env_bb, 
-        bb_controller, 
-        timedelta(days=SIM_DAYS), 
-        animate=False, 
-        path='./temp_results_bb' # Temporary path for internal logs
-    )
-    # The sim() function executes the Ordinary Differential Equations (ODEs)
-    # to calculate glucose changes over time.
-    results_bb = sim(sim_obj_bb)
-
-    # --- Simulation B: PID ---
-    print("\nRunning PID Simulation...")
-    env_pid = create_env() # Create fresh environment
-    
-    sim_obj_pid = SimObj(
-        env_pid, 
-        pid_controller, 
-        timedelta(days=SIM_DAYS), 
-        animate=False, 
-        path='./temp_results_pid'
-    )
-    results_pid = sim(sim_obj_pid)
-
-     # --- Simulation C: RL ---
-    print("\nRunning RL Simulation...")
-    env_rl = create_env() # Create fresh environment
-    
-    sim_obj_rl = SimObj(
-        env_rl,
-        rl_controller, 
-        timedelta(days=SIM_DAYS), 
-        animate=False, 
-        path='./temp_results_rl'
-    )
-    results_rl = sim(sim_obj_rl)
-
-
-    # --- 5. COLLECT RESULTS ---
-    # Store dataframes in a dictionary for easier processing by helper functions
-    results_dict = {
-        'Basal-Bolus': results_bb,
-        'PID': results_pid,
-        'RL' : results_rl
-    }
-
-    # --- 6. DISPLAY METRICS ---
-    print("\n" + "="*30)
-    print("      METRIC RESULTS      ")
-    print("="*30)
-    
-    # Calculate and print stats (Time in Range, Mean BG, etc.)
-    helpers.print_glycemic_metrics(results_bb, "Basal-Bolus")
-    helpers.print_glycemic_metrics(results_pid, "PID")
-    helpers.print_glycemic_metrics(results_rl,"RL")
-
-    # --- 7. SAVE FILES AND PLOTS ---
-    # Create a unique folder name based on the current timestamp
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    folder_name = f"Simulation_{PATIENT_ID}_{timestamp}"
-    
-    print(f"\nSaving results to folder: {folder_name}...")
-    
-    # Call the helper function to save CSV files and generate plots
-    helpers.save_all_results(results_dict, folder_name=folder_name)
-    
-    print("\nSimulation completed successfully.")
+    helpers.plot_comparison(aggregated_results, patient_id=PATIENT_ID, save_path=os.path.join(folder, "comparison_plot.png"))
+    print(f"  ✓ comparison_plot.png")
+    print("\n" + "="*90 + "\n" + " " * 30 + "EVALUATION COMPLETED" + "\n" + "="*90)
 
 if __name__ == "__main__":
     main()

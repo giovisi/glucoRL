@@ -9,7 +9,14 @@ __pycache__/*
 .vscode/
 
 # Temporary results
-temp_results*
+temp_*
+
+# Eval logs
+eval_logs*
+
+# Checkpoints
+checkpoints/*
+checkpoints_paper/ppo_*
 
 # Simulation data (for now)
 Simulation_*

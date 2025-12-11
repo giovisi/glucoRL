@@ -1,11 +1,10 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import os
+import numpy as np
 
 def print_glycemic_metrics(df, controller_name):
-    """
-    Calculates and prints TIR, TBR, TAR, and Mean BG.
-    """
+    """Calcola e stampa TIR, TBR, TAR e media."""
     BG = df['BG'].values
     total_steps = len(BG)
     
@@ -24,57 +23,147 @@ def print_glycemic_metrics(df, controller_name):
     print(f"TAR (>180 mg/dL):    {tar:.2f}%")
     print(f"Mean BG:             {mean_bg:.2f} mg/dL")
 
-
 def plot_comparison(results_dict, patient_id="Unknown", save_path=None):
     """
-    Plots results. If save_path is provided, saves the image instead of just showing it.
+    Genera grafici comparativi MIGLIORATI con subplot multipli
     """
-    n_plots = len(results_dict)
-    if n_plots == 0:
-        print("No data to plot.")
+    n_methods = len(results_dict)
+    if n_methods == 0:
         return
 
-    fig, axes = plt.subplots(n_plots, 1, figsize=(12, 2.5 * n_plots), sharex=True)
-    if n_plots == 1: axes = [axes]
+    # FIGURA PRINCIPALE: Time series + statistiche
+    fig = plt.figure(figsize=(16, 10))
+    gs = fig.add_gridspec(n_methods + 1, 2, hspace=0.3, wspace=0.3)
     
-    for ax, (name, df) in zip(axes, results_dict.items()):
-        ax.plot(df.index, df['BG'], label=f'{name} Trace', linewidth=2)
-        ax.axhline(180, color='red', linestyle='--', alpha=0.5)
-        ax.axhline(70, color='red', linestyle='--', alpha=0.5)
-        ax.fill_between(df.index, 70, 180, color='green', alpha=0.1)
-        ax.set_ylabel('BG (mg/dL)')
-        ax.set_title(f'{name} Control ({patient_id})')
-        ax.grid(True, linestyle=':', alpha=0.6)
-        ax.legend(loc='upper right')
+    # Trova range temporale comune
+    first_df = list(results_dict.values())[0]
+    t_start = first_df.index[0]
+    t_end = first_df.index[-1]
+    
+    # Colori per metodi
+    colors = {'Basal-Bolus': '#1f77b4', 'PID': '#ff7f0e', 'RL Smart': '#2ca02c'}
+    
+    # =============================================================================
+    # SUBPLOT 1-N: Time series glucosio
+    # =============================================================================
+    for idx, (name, df) in enumerate(results_dict.items()):
+        ax = fig.add_subplot(gs[idx, 0])
+        
+        # Plot BG con zona target evidenziata
+        ax.plot(df.index, df['BG'], linewidth=1.5, color=colors.get(name, 'black'), alpha=0.8)
+        
+        # Zone colorate
+        ax.axhline(180, color='red', linestyle='--', linewidth=1, alpha=0.4)
+        ax.axhline(70, color='red', linestyle='--', linewidth=1, alpha=0.4)
+        ax.axhline(250, color='darkred', linestyle=':', linewidth=1, alpha=0.3)
+        ax.axhline(54, color='darkred', linestyle=':', linewidth=1, alpha=0.3)
+        ax.fill_between(df.index, 70, 180, color='green', alpha=0.15, label='Target Range')
+        
+        # Calcola metriche per titolo
+        BG = df['BG'].values
+        tir = ((BG >= 70) & (BG <= 180)).sum() / len(BG) * 100
+        mean_bg = BG.mean()
+        
+        ax.set_ylabel('Glucose (mg/dL)', fontsize=10)
+        ax.set_title(f'{name} | TIR: {tir:.1f}% | Mean: {mean_bg:.1f} mg/dL', 
+                     fontsize=11, fontweight='bold')
+        ax.grid(True, linestyle=':', alpha=0.4)
+        ax.set_ylim([40, 400])
+        
+        if idx == n_methods - 1:
+            ax.set_xlabel('Time', fontsize=10)
+        else:
+            ax.set_xticklabels([])
 
-    axes[-1].set_xlabel('Time')
-    plt.tight_layout()
-
-    # SAVE LOGIC
+    # =============================================================================
+    # SUBPLOT N+1: Distribuzione glucosio (Violini)
+    # =============================================================================
+    ax_violin = fig.add_subplot(gs[:, 1])
+    
+    bg_distributions = []
+    labels = []
+    
+    for name, df in results_dict.items():
+        bg_distributions.append(df['BG'].values)
+        labels.append(name)
+    
+    parts = ax_violin.violinplot(bg_distributions, positions=range(len(labels)),
+                                   showmeans=True, showmedians=True, widths=0.7)
+    
+    # Colora violini
+    for idx, pc in enumerate(parts['bodies']):
+        method_name = labels[idx]
+        pc.set_facecolor(colors.get(method_name, 'gray'))
+        pc.set_alpha(0.6)
+    
+    # Zone target
+    ax_violin.axhline(180, color='red', linestyle='--', linewidth=1, alpha=0.5, label='Hyperglycemia')
+    ax_violin.axhline(70, color='red', linestyle='--', linewidth=1, alpha=0.5, label='Hypoglycemia')
+    ax_violin.fill_between([-0.5, len(labels)-0.5], 70, 180, color='green', alpha=0.1)
+    
+    ax_violin.set_xticks(range(len(labels)))
+    ax_violin.set_xticklabels(labels, rotation=15, ha='right')
+    ax_violin.set_ylabel('Glucose Distribution (mg/dL)', fontsize=11, fontweight='bold')
+    ax_violin.set_title('Glucose Distribution Comparison', fontsize=12, fontweight='bold')
+    ax_violin.grid(axis='y', linestyle=':', alpha=0.4)
+    ax_violin.set_ylim([40, 400])
+    ax_violin.legend(loc='upper right', fontsize=9)
+    
+    # Titolo generale
+    fig.suptitle(f'Glucose Control Comparison - Patient: {patient_id}', 
+                 fontsize=14, fontweight='bold', y=0.995)
+    
     if save_path:
-        plt.savefig(save_path, dpi=300) # dpi=300 makes it high quality
-        print(f"Plot saved to: {save_path}")
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"[PLOT] Saved to: {save_path}")
     
     plt.show()
 
-
 def save_all_results(results_dict, folder_name="simulation_results"):
-    """
-    Creates a folder, saves all DataFrames as CSVs, and saves the Plot.
-    """
-    # 1. Create the folder if it doesn't exist
+    """Salva CSV e Immagini."""
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
-        print(f"Created directory: {folder_name}")
 
-    # 2. Save each DataFrame as a CSV file
     for name, df in results_dict.items():
-        # Clean the name to be filename-safe (remove spaces)
         safe_name = name.replace(" ", "_").lower()
         file_path = os.path.join(folder_name, f"{safe_name}.csv")
         df.to_csv(file_path)
-        print(f"Saved data: {file_path}")
 
-    # 3. Save the combined plot in the same folder
     plot_path = os.path.join(folder_name, "comparison_plot.png")
     plot_comparison(results_dict, save_path=plot_path)
+
+def plot_glycemic_zones_pie(results_dict, save_path=None):
+    """
+    Crea un pie chart delle zone glicemiche per confronto
+    """
+    fig, axes = plt.subplots(1, len(results_dict), figsize=(5*len(results_dict), 5))
+    
+    if len(results_dict) == 1:
+        axes = [axes]
+    
+    for ax, (name, df) in zip(axes, results_dict.items()):
+        BG = df['BG'].values
+        
+        # Calcola percentuali
+        severe_hypo = (BG < 54).sum() / len(BG) * 100
+        hypo = ((BG >= 54) & (BG < 70)).sum() / len(BG) * 100
+        tir = ((BG >= 70) & (BG <= 180)).sum() / len(BG) * 100
+        hyper = ((BG > 180) & (BG <= 250)).sum() / len(BG) * 100
+        severe_hyper = (BG > 250).sum() / len(BG) * 100
+        
+        sizes = [severe_hypo, hypo, tir, hyper, severe_hyper]
+        labels = [f'Severe Hypo\n(<54)', f'Hypo\n(54-70)', f'TIR\n(70-180)', 
+                  f'Hyper\n(180-250)', f'Severe Hyper\n(>250)']
+        colors = ['#8b0000', '#ff6347', '#90ee90', '#ffa500', '#8b0000']
+        explode = (0.1, 0.05, 0, 0.05, 0.1)
+        
+        ax.pie(sizes, explode=explode, labels=labels, colors=colors, autopct='%1.1f%%',
+               shadow=True, startangle=90)
+        ax.set_title(f'{name}\nTIR: {tir:.1f}%', fontweight='bold')
+    
+    plt.suptitle('Glycemic Zones Distribution', fontsize=14, fontweight='bold')
+    
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    
+    plt.show()
