@@ -24,9 +24,10 @@ def train():
     patient_id = 'adolescent#003'
     
     # Setup directories
-    log_dir = "./ppo_paper_tensorboard/"
-    checkpoint_dir = "./checkpoints_paper/"
-    eval_log_dir = "./eval_logs_paper/"
+    log_dir = "./train/ppo_paper_tensorboard/"
+    checkpoint_dir = "./train/checkpoints_paper/"
+    eval_log_dir = "./train/eval_logs_paper/"
+    results_dir = "./train/results/"
     
     for directory in [log_dir, checkpoint_dir, eval_log_dir]:
         os.makedirs(directory, exist_ok=True)
@@ -35,8 +36,7 @@ def train():
     env_kwargs = {
         'patient_name': patient_id,
         'reward_fun': paper_reward,  # Explicitly use the paper's reward
-        'seed': 42,
-        'max_episode_days': 1  # 1 day = 288 steps (each step = 5 min)
+        'seed': 42
     }
 
     # Parallelization
@@ -53,8 +53,7 @@ def train():
     # Evaluation Environment
     print("[INFO] Creating evaluation environment...")
     eval_env_kwargs = env_kwargs.copy()
-    eval_env_kwargs['seed'] = 123
-    eval_env_kwargs['max_episode_days'] = 1  # Same as training
+    eval_env_kwargs['seed'] = 42
     eval_env = make_vec_env(
         CustomT1DEnv,
         n_envs=1,
@@ -124,7 +123,7 @@ def train():
         print("\n[WARNING] Training interrupted manually.")
 
     # Save Final Model
-    final_model_name = f"ppo_{patient_id}_paper_final"
+    final_model_name = f"{results_dir}/ppo_{patient_id}_paper_final"
     model.save(final_model_name)
     print(f"\n[SUCCESS] Final model saved: {final_model_name}.zip")
     

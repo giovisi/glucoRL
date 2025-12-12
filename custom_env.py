@@ -59,12 +59,9 @@ def paper_reward(bg_hist, **kwargs):
 class CustomT1DEnv(gym.Env):
     metadata = {"render_modes": ["human"]}
 
-    def __init__(self, patient_name=None, custom_scenario=None, reward_fun=None, seed=None, max_episode_days=1):
+    def __init__(self, patient_name=None, custom_scenario=None, reward_fun=None, seed=None):
         """
         Initialize the Custom Environment.
-        
-        Args:
-            max_episode_days: Maximum episode length in days (default: 1 day = 288 steps)
         """
         self.patient_name = patient_name
         self.custom_scenario = custom_scenario
@@ -77,10 +74,6 @@ class CustomT1DEnv(gym.Env):
             
         self.seed_val = seed
         self.k_history = 12  # History length: 1 hour (12 * 5 mins) [cite: 196]
-        
-        # Episode length management (5-min steps, so 288 steps = 1 day)
-        self.max_episode_steps = int(max_episode_days * 288)
-        self.current_step = 0
         
         # Initialize manual buffers
         self.bg_history_buffer = []
@@ -177,30 +170,17 @@ class CustomT1DEnv(gym.Env):
             obs, reward, done, info = self.env.step(act, reward_fun=self.reward_fun)
         else:
             obs, reward, done, info = self.env.step(act)
-
-        # Increment step counter
-        self.current_step += 1
-        
-        # Override done flag: Only terminate if max steps reached
-        # Allow the agent to recover from dangerous glucose levels
-        done = self.current_step >= self.max_episode_steps
         
         # Update history and get state
         self._update_history(obs.CGM, basal_act + bolus_act)
         new_obs = self._get_smart_state()
         
-        # Add step info for debugging
-        info['episode_step'] = self.current_step
-        info['glucose'] = obs.CGM
         
         return new_obs, reward, done, False, info
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         obs, _, _, _ = self.env.reset()
-        
-        # Reset step counter
-        self.current_step = 0
         
         self.bg_history_buffer = [obs.CGM] * self.k_history
         self.ins_history_buffer = [0.0] * self.k_history
