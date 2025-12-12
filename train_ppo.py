@@ -128,6 +128,19 @@ def train():
     model.save(final_model_name)
     print(f"\n[SUCCESS] Final model saved: {final_model_name}.zip")
     
+    # Cleanup: Delete all checkpoint files from this run
+    print("\n[CLEANUP] Removing checkpoint files...")
+    checkpoint_files = [f for f in os.listdir(checkpoint_dir) if f.startswith(f"ppo_{patient_id}_paper_")]
+    for checkpoint_file in checkpoint_files:
+        checkpoint_path = os.path.join(checkpoint_dir, checkpoint_file)
+        try:
+            os.remove(checkpoint_path)
+        except Exception as e:
+            print(f"  ✗ Failed to delete {checkpoint_file}: {e}")
+    
+    if checkpoint_files:
+        print(f"[CLEANUP] Removed {len(checkpoint_files)} checkpoint file(s)")
+    
     train_env.close()
     eval_env.close()
 

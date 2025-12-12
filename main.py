@@ -33,7 +33,7 @@ from custom_env import CustomT1DEnv
 # =============================================================================
 SIM_DAYS = 7 
 PATIENT_ID = 'adolescent#003'
-RL_MODEL_PATH = "ppo_adolescent003_paper_final"  # Points to new paper-based model
+RL_MODEL_PATH = "ppo_adolescent#003_paper_final"  # Points to new paper-based model
 N_TRIALS = 5 
 
 # ... (Scenario Generation Logic - No Changes) ...
@@ -106,7 +106,7 @@ def main():
         print("  → Running Basal-Bolus...")
         bb_controller = BBController()
         env_bb = create_standard_env(scenario)
-        sim_obj_bb = SimObj(env_bb, bb_controller, timedelta(days=SIM_DAYS), animate=False, path=f'./temp_bb_trial{trial}')
+        sim_obj_bb = SimObj(env_bb, bb_controller, timedelta(days=SIM_DAYS), animate=False, path=f'./temp/temp_bb_trial{trial}')
         results_bb = sim(sim_obj_bb)
         all_results['Basal-Bolus'].append(results_bb)
 
@@ -114,14 +114,14 @@ def main():
         print("  → Running PID...")
         pid_controller = PIDController(P=1.0e-4, I=1.0e-7, D=3.9e-3, target=140)
         env_pid = create_standard_env(scenario)
-        sim_obj_pid = SimObj(env_pid, pid_controller, timedelta(days=SIM_DAYS), animate=False, path=f'./temp_pid_trial{trial}')
+        sim_obj_pid = SimObj(env_pid, pid_controller, timedelta(days=SIM_DAYS), animate=False, path=f'./temp/temp_pid_trial{trial}')
         results_pid = sim(sim_obj_pid)
         all_results['PID'].append(results_pid)
 
         # 3. RL
         print("  → Running RL (Smart PPO)...")
         if not os.path.exists(f"{RL_MODEL_PATH}.zip"):
-            print(f"[ERROR] Modello {RL_MODEL_PATH}.zip non trovato!\nEsegui prima: python train_ppo.py")
+            print(f"[ERROR] Model {RL_MODEL_PATH}.zip not found!\nRun first: python train_ppo.py")
             return
 
         env_rl = CustomT1DEnv(patient_name=PATIENT_ID, custom_scenario=scenario)
@@ -154,7 +154,7 @@ def main():
     print_metrics_table(aggregated_results)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    folder = f"Results_{timestamp}"
+    folder = f"results/Results_{timestamp}"
     os.makedirs(folder, exist_ok=True)
     print(f"\n[SAVING RESULTS] → {folder}/")
     for name, df in aggregated_results.items():

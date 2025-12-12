@@ -2,22 +2,21 @@
 .DS_Store
 
 # Python cache files
-__pycache__/*
+__pycache__/
 *.py[cod]
 
 # VSCode settings
 .vscode/
 
 # Temporary results
-temp_*
+temp/
 
 # Eval logs
 eval_logs*
 
 # Checkpoints
-checkpoints/*
 checkpoints_paper/ppo_*
 
 # Simulation data (for now)
-Simulation_*
+simulations/
 ppo_*/
