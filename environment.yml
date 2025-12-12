@@ -14,3 +14,4 @@ dependencies:
       - gymnasium>=0.28.1
       - gym==0.9.4
       - tensorboard
+      - pathos

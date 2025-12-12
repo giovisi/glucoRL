@@ -59,9 +59,13 @@ def paper_reward(bg_hist, **kwargs):
 class CustomT1DEnv(gym.Env):
     metadata = {"render_modes": ["human"]}
 
-    def __init__(self, patient_name=None, custom_scenario=None, reward_fun=None, seed=None):
+    def __init__(self, patient_name=None, custom_scenario=None, reward_fun=None, seed=None, max_episode_days=1, allow_early_termination=False):
         """
         Initialize the Custom Environment.
+        
+        Args:
+            allow_early_termination: If False, episodes run for full max_episode_days
+                                   If True, episodes can end on dangerous glucose
         """
         self.patient_name = patient_name
         self.custom_scenario = custom_scenario
@@ -75,6 +79,11 @@ class CustomT1DEnv(gym.Env):
         self.seed_val = seed
         self.k_history = 12  # History length: 1 hour (12 * 5 mins) [cite: 196]
         
+        # Episode management
+        self.max_episode_steps = int(max_episode_days * 288)  # 288 steps = 1 day
+        self.allow_early_termination = allow_early_termination
+        self.current_step = 0
+        
         # Initialize manual buffers
         self.bg_history_buffer = []
         self.ins_history_buffer = []
@@ -83,9 +92,12 @@ class CustomT1DEnv(gym.Env):
         self.env, _, _, _ = self._create_env()
 
         # --- ACTION SPACE ---
-        # The paper uses a continuous action space mapped to [0, 5] U/min[cite: 202].
-        self.max_basal = self.env.pump._params['max_basal']
-        self.max_bolus = 5.0 
+        # Scale actions to realistic insulin ranges
+        # REDUCED to prevent overdosing during learning
+        # Basal: 0-0.15 U/min (more conservative)
+        # Bolus: 0-2.5 U (smaller meal bolus)
+        self.max_basal = 0.15  # U/min (reduced from 0.3)
+        self.max_bolus = 2.5   # U (reduced from 5.0)
         
         self.action_space = gym.spaces.Box(
             low=np.array([0.0, 0.0]), 
@@ -152,10 +164,14 @@ class CustomT1DEnv(gym.Env):
         c_30_60 = self._sum_carbs_in_window(t_now + timedelta(minutes=30), t_now + timedelta(minutes=60))
         c_60_120 = self._sum_carbs_in_window(t_now + timedelta(minutes=60), t_now + timedelta(minutes=120))
 
+        # Better normalization:
+        # BG: Divide by 400 to keep most values in [0, 1]
+        # Insulin: Divide by max possible insulin per 5 min (0.3 * 5 + 5 = 6.5)
+        # Carbs: Divide by typical meal size (75g)
         obs = np.concatenate([
-            np.array(bg_hist) / 200.0,
-            np.array(ins_hist) * 1.0, 
-            np.array([c_0_30, c_30_60, c_60_120]) / 50.0 
+            np.array(bg_hist) / 400.0,  # BG normalization
+            np.array(ins_hist) / 10.0,  # Insulin normalization
+            np.array([c_0_30, c_30_60, c_60_120]) / 75.0  # Carb normalization
         ])
         
         return obs.astype(np.float32)
@@ -171,10 +187,30 @@ class CustomT1DEnv(gym.Env):
         else:
             obs, reward, done, info = self.env.step(act)
         
+        # Get current glucose (CGM reading)
+        current_bg = obs.CGM if obs.CGM is not None else self.env.patient.observation.Gsub
+        
+        # Increment step counter
+        self.current_step += 1
+        
+        # Control termination: allow agent to learn recovery unless configured otherwise
+        if not self.allow_early_termination:
+            # Override done - only end after max steps (let agent learn from mistakes)
+            done = self.current_step >= self.max_episode_steps
+        else:
+            # Keep environment's natural termination OR max steps
+            done = done or (self.current_step >= self.max_episode_steps)
+        
         # Update history and get state
-        self._update_history(obs.CGM, basal_act + bolus_act)
+        self._update_history(current_bg, basal_act + bolus_act)
         new_obs = self._get_smart_state()
         
+        # Enhanced info dict for debugging and monitoring
+        info['glucose'] = current_bg
+        info['basal'] = basal_act
+        info['bolus'] = bolus_act
+        info['total_insulin'] = basal_act + bolus_act
+        info['episode_step'] = self.current_step
         
         return new_obs, reward, done, False, info
 
@@ -182,7 +218,13 @@ class CustomT1DEnv(gym.Env):
         super().reset(seed=seed)
         obs, _, _, _ = self.env.reset()
         
-        self.bg_history_buffer = [obs.CGM] * self.k_history
+        # Reset step counter
+        self.current_step = 0
+        
+        # Get initial glucose
+        initial_bg = obs.CGM if obs.CGM is not None else self.env.patient.observation.Gsub
+        
+        self.bg_history_buffer = [initial_bg] * self.k_history
         self.ins_history_buffer = [0.0] * self.k_history
         
         new_obs = self._get_smart_state()

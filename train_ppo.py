@@ -11,7 +11,7 @@ sys.path.insert(0, SUBMODULE_ROOT)
 import gymnasium as gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback, CallbackList
 import os
 import torch
@@ -19,6 +19,7 @@ import numpy as np
 
 # Import the environment (paper_reward is now the default inside CustomT1DEnv)
 from custom_env import CustomT1DEnv, paper_reward
+from curriculum_reward import soft_curriculum_reward, shaped_reward
 
 def train():
     patient_id = 'adolescent#003'
@@ -33,10 +34,13 @@ def train():
         os.makedirs(directory, exist_ok=True)
 
     # Environment Configuration
+    # BACK TO SOFT CURRICULUM: Gentler penalties for learning
     env_kwargs = {
         'patient_name': patient_id,
-        'reward_fun': paper_reward,  # Explicitly use the paper's reward
-        'seed': 42
+        'reward_fun': soft_curriculum_reward,  # Gentler -5 max penalty
+        'seed': 42,
+        'max_episode_days': 1,  # 288 steps per episode
+        'allow_early_termination': False  # Let agent learn from mistakes!
     }
 
     # Parallelization
@@ -50,10 +54,10 @@ def train():
         vec_env_cls=SubprocVecEnv
     )
 
-    # Evaluation Environment
+    # Evaluation Environment (without VecNormalize)
     print("[INFO] Creating evaluation environment...")
     eval_env_kwargs = env_kwargs.copy()
-    eval_env_kwargs['seed'] = 42
+    eval_env_kwargs['seed'] = 123  # Different seed for evaluation
     eval_env = make_vec_env(
         CustomT1DEnv,
         n_envs=1,
@@ -84,27 +88,33 @@ def train():
 
     # Initialize PPO Model
     print(f"\n{'='*70}")
-    print(f"[STARTING PAPER REWARD TRAINING] Patient: {patient_id}")
-    print(f"Goal: Minimize Risk Index (Penalty: -15 for Hypo)")
+    print(f"[NO VEC NORMALIZE v4] Patient: {patient_id}")
+    print(f"REMOVED: VecNormalize (keeping manual normalization)")
+    print(f"Settings: LR=1e-3, ent_coef=0.1, balanced reward")
+    print(f"Goal: Let raw observations guide insulin decisions")
     print(f"{'='*70}\n")
+    
+    # REMOVED VecNormalize - our manual normalization in env should be sufficient
+    # train_env = VecNormalize(train_env, norm_obs=True, norm_reward=False, clip_obs=10.0)
     
     model = PPO(
         "MlpPolicy",
         train_env,
         verbose=1,
-        learning_rate=3e-4,
-        n_steps=2048,
-        batch_size=256,
+        learning_rate=1e-3,  # MUCH HIGHER: Break out of bad initialization
+        n_steps=4096,
+        batch_size=512,
         n_epochs=10,
-        gamma=0.995,
+        gamma=0.98,
         gae_lambda=0.95,
         clip_range=0.2,
-        ent_coef=0.005,
+        ent_coef=0.1,  # MASSIVE INCREASE: Force random exploration initially
         vf_coef=0.5,
         max_grad_norm=0.5,
         policy_kwargs=dict(
-            net_arch=dict(pi=[128, 128, 64], vf=[128, 128, 64]),
-            activation_fn=torch.nn.ReLU
+            net_arch=dict(pi=[256, 256, 128], vf=[256, 256, 128]),
+            activation_fn=torch.nn.ReLU,
+            log_std_init=-1.0  # Initialize with more randomness
         ),
         tensorboard_log=log_dir,
         device="auto"
