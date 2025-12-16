@@ -1,8 +1,16 @@
+import os
+import sys
+
+# Project root = folder where main.py lives
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+# Add the *inner* simglucose repo root to sys.path
+SUBMODULE_ROOT = os.path.join(PROJECT_ROOT, "simglucose")
+sys.path.insert(0, SUBMODULE_ROOT)
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-import os
-import sys
 from datetime import datetime, timedelta
 from stable_baselines3 import PPO
 from custom_env import CustomT1DEnv
@@ -16,7 +24,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # ================= CONFIGURAZIONE =================
 PATIENT_ID = 'adolescent#003'
-MODEL_PATH = "train/checkpoints_paper/best_model.zip"  # Usa SEMPRE il best model
+MODEL_PATH = "train/checkpoints/best_model.zip"  # Usa SEMPRE il best model
 OUTPUT_FOLDER = f"test/robustness/Robustness_Test_{datetime.now().strftime('%Y%m%d_%H%M')}"
 # ==================================================
 
@@ -192,6 +200,7 @@ def main():
     print("\n--- REPORT ANTEPRIMA ---")
     for line in report_lines:
         print(line)
+    print("------------------------------------------------------------")
 
 if __name__ == "__main__":
     main()

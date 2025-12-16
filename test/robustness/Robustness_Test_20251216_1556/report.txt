@@ -1,0 +1,10 @@
+ROBUSTNESS TEST REPORT
+Date: 2025-12-16 15:56:14.283121
+Model: train/checkpoints/best_model.zip
+------------------------------------------------------------
+SCENARIO        | TIR %    | TBR %    | TAR %    | MEAN   | CV %  
+------------------------------------------------------------
+High_Carbs      |    70.6  |     1.9  |    27.5  |    149 |   28.2
+Missed_Lunch    |    93.8  |     0.0  |     6.2  |    131 |   21.2
+Late_Dinner     |    98.8  |     0.0  |     1.2  |    126 |   17.2
+Random_Chaos    |    78.1  |     0.0  |    21.9  |    156 |   28.9
