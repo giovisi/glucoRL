@@ -20,3 +20,6 @@ checkpoints_paper/ppo_*
 # Simulation data (for now)
 simulations/
 ppo_*/
+
+# Robustness analysis data
+test/robustness/

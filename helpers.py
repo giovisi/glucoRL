@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-import pandas as pd
 import os
 import numpy as np
 
@@ -167,3 +166,103 @@ def plot_glycemic_zones_pie(results_dict, save_path=None):
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
     
     plt.show()
+
+
+def plot_glycemic_distribution(results_dict, save_path):
+    """
+    Generates a Violin Plot to compare glucose density distribution.
+    Shows if RL maintains more stable glucose (denser center).
+    """
+    plt.figure(figsize=(10, 6))
+    
+    data_to_plot = []
+    labels = []
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c']  # Blue, Orange, Green
+    
+    for name, df in results_dict.items():
+        if not df.empty:
+            data_to_plot.append(df['BG'].values)
+            labels.append(name)
+            
+    if not data_to_plot:
+        return
+
+    parts = plt.violinplot(data_to_plot, showmeans=True, showmedians=True)
+    
+    # Styling
+    for i, pc in enumerate(parts['bodies']):
+        pc.set_facecolor(colors[i % len(colors)])
+        pc.set_alpha(0.6)
+        
+    plt.axhline(180, color='red', linestyle='--', alpha=0.5, label='Hyper Limit')
+    plt.axhline(70, color='red', linestyle='--', alpha=0.5, label='Hypo Limit')
+    plt.fill_between([0.5, len(labels)+0.5], 70, 180, color='green', alpha=0.1, label='Target Range')
+    
+    plt.xticks(np.arange(1, len(labels) + 1), labels, fontsize=11, fontweight='bold')
+    plt.ylabel('Glucose (mg/dL)')
+    plt.title('Glucose Distribution Density (Violin Plot)')
+    plt.legend(loc='upper right')
+    plt.grid(axis='y', linestyle=':', alpha=0.5)
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
+
+def plot_tir_breakdown(results_dict, save_path):
+    """
+    Generates stacked bar chart with 5 standard clinical zones.
+    """
+    zones = {
+        'Very Low (<54)': (-np.inf, 54),
+        'Low (54-70)': (54, 70),
+        'Target (70-180)': (70, 180),
+        'High (180-250)': (180, 250),
+        'Very High (>250)': (250, np.inf)
+    }
+    
+    zone_colors = ['#8b0000', '#ff4444', '#32cd32', '#ffa500', '#8b4500']
+    names = []
+    zone_data = {k: [] for k in zones.keys()}
+    
+    for name, df in results_dict.items():
+        if df.empty:
+            continue
+        names.append(name)
+        bg = df['BG'].values
+        total = len(bg)
+        
+        for zone_name, (low, high) in zones.items():
+            count = ((bg >= low) & (bg < high)).sum()
+            pct = (count / total) * 100
+            zone_data[zone_name].append(pct)
+            
+    if not names:
+        return
+
+    # Plotting
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bottom = np.zeros(len(names))
+    
+    for (zone_label, values), color in zip(zone_data.items(), zone_colors):
+        ax.bar(names, values, bottom=bottom, label=zone_label, color=color, alpha=0.8, width=0.6)
+        
+        # Add percentage labels if space is sufficient
+        for i, v in enumerate(values):
+            if v > 5:  # Only show if > 5%
+                ax.text(i, bottom[i] + v/2, f"{v:.1f}%", ha='center', va='center', 
+                        color='white' if color != '#32cd32' else 'black', fontweight='bold')
+        bottom += values
+
+    ax.set_ylabel('Percentage of Time (%)')
+    ax.set_title('Clinical Glycemic Zones Breakdown')
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
+
+def perform_advanced_analysis(results_dict, folder):
+    """Generate advanced visualization plots."""
+    print("\n[ANALYSIS] Generating advanced plots...")
+    plot_glycemic_distribution(results_dict, os.path.join(folder, "analysis_violin.png"))
+    plot_tir_breakdown(results_dict, os.path.join(folder, "analysis_zones.png"))
+    print("  ✓ Violin plot saved.")
+    print("  ✓ Clinical Zones plot saved.")
