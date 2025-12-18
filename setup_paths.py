@@ -10,10 +10,15 @@ Usage:
 import os
 import sys
 
+# Fix OpenMP duplicate library issue on macOS (numpy + pytorch conflict)
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+
 # Project root = folder where this file lives
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TRAIN_DIR = os.path.join(BASE_DIR, "train")
+TEST_DIR = os.path.join(BASE_DIR, "test")
 
 # Add the simglucose submodule to sys.path (only once)
-SUBMODULE_ROOT = os.path.join(PROJECT_ROOT, "simglucose")
+SUBMODULE_ROOT = os.path.join(BASE_DIR, "simglucose")
 if SUBMODULE_ROOT not in sys.path:
     sys.path.insert(0, SUBMODULE_ROOT)

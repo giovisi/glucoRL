@@ -1,6 +1,5 @@
 import gymnasium as gym
 import numpy as np
-import pandas as pd
 from datetime import datetime, timedelta
 from simglucose.simulation.env import T1DSimEnv as _T1DSimEnv
 from simglucose.patient.t1dpatient import T1DPatient
@@ -9,78 +8,8 @@ from simglucose.actuator.pump import InsulinPump
 from simglucose.simulation.scenario_gen import RandomScenario
 from simglucose.controller.base import Action
 
-# --- RISK INDEX CALCULATION (Standard Formula) ---
-def compute_risk_index(BG):
-    """
-    Calculates the standard Risk Index (RI) based on Kovatchev et al.[cite: 208].
-    This computes the raw risk value before any normalization.
-    """
-    # Ensure BG is at least 1.0 to avoid mathematical errors with log
-    bg_val = max(BG, 1.0) 
-    
-    # 1. Apply the standard logarithmic transformation function f(BG)
-    # Constants 1.509, 1.084, and 5.381 are standard parameters for this medical formula
-    f_bg = 1.509 * ((np.log(bg_val) ** 1.084) - 5.381)
-    
-    # 2. Calculate the Risk Index: 10 * f(BG)^2
-    ri = 10 * (f_bg ** 2)
-    
-    return ri
+from reward_functions import paper_reward
 
-# --- REWARD FUNCTION (G2P2C Paper Implementation) ---
-def paper_reward(bg_hist, **kwargs):
-    """
-    Implements the exact reward function defined in Equation (6) of the G2P2C paper[cite: 211, 214].
-    
-    Formula:
-    R(s,a) = -15                 if g_{t+1} <= 39 mg/dL (Severe Hypoglycemia)
-    R(s,a) = -1 * Normalized_RI  otherwise
-    """
-    # Get the most recent glucose value (g_{t+1})
-    g_next = bg_hist[-1]
-    
-    # --- Condition 1: Severe Hypoglycemia ---
-    # The paper specifies a hard penalty for severe hypoglycemia[cite: 212].
-    if g_next <= 39.0:
-        return -15.0
-        
-    # --- Condition 2: Normalized Risk Index ---
-    # For the rest of the range, the paper uses a negative normalized RI[cite: 213].
-    # Normalization implies scaling the RI to the range [0, 1].
-    # Theoretical maximum risk is often considered around 100.
-    raw_ri = compute_risk_index(g_next)
-    max_theoretical_risk = 100.0 
-    normalized_ri = min(raw_ri / max_theoretical_risk, 1.0)
-    
-    # Return the negative normalized risk (Max Reward = 0, Min Reward = -1)
-    return -1.0 * normalized_ri
-
-# --- SMART REWARD FUNCTION (Enhanced) ---
-def smart_reward(bg_hist, **kwargs):
-    """
-    Enhanced reward function with positive rewards in target range.
-    More aggressive penalties for severe conditions.
-    """
-    bg = bg_hist[-1]
-    
-    # Catastrophic hypoglycemia
-    if bg <= 40:
-        return -100.0
-    
-    # Target range: positive reward
-    if 70 <= bg <= 150:
-        return 1.0
-    
-    # Acceptable range: smaller positive reward
-    if 150 < bg <= 180:
-        return 0.5
-    
-    # Out of range: negative reward based on risk
-    risk = compute_risk_index(bg)
-    multiplier = 2.0 if bg > 250 else 1.0
-    return -1.0 * (risk / 50.0) * multiplier
-
-# --- GYM ENVIRONMENT CLASS ---
 class CustomT1DEnv(gym.Env):
     metadata = {"render_modes": ["human"]}
 
@@ -91,7 +20,7 @@ class CustomT1DEnv(gym.Env):
         Args:
             patient_name: Name of the T1D patient
             custom_scenario: Fixed scenario or None for random generation
-            reward_fun: Reward function (paper_reward or smart_reward)
+            reward_fun: Reward function (default: paper_reward)
             seed: Random seed
             episode_days: Duration of episode in days (default=1)
         """
@@ -108,7 +37,7 @@ class CustomT1DEnv(gym.Env):
         self.k_history = 12  # History length: 1 hour (12 * 5 mins)
         self.episode_days = episode_days  # Episode duration in days
         
-        # Initialize manual buffers
+        # Initialize manual buffers (empty at start)
         self.bg_history_buffer = []
         self.ins_history_buffer = []
         
@@ -223,6 +152,7 @@ class CustomT1DEnv(gym.Env):
         ])
         
         return obs.astype(np.float32)
+
 
     def step(self, action):
         """
