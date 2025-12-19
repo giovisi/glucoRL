@@ -14,9 +14,7 @@ import sys
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 # Project root = folder where this file lives
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TRAIN_DIR = os.path.join(BASE_DIR, "train")
-TEST_DIR = os.path.join(BASE_DIR, "test")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Add the simglucose submodule to sys.path (only once)
 SUBMODULE_ROOT = os.path.join(BASE_DIR, "simglucose")

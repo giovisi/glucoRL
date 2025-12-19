@@ -38,6 +38,8 @@ def train(n_envs=4, total_steps=2_000_000, episode_days=1):
     # Initialize training configuration
     env_kwargs = setup_train_config(episode_days, total_steps, n_envs, PATIENT_ID, LOG_DIR, CHECKPOINT_DIR,
                                    EVAL_LOG_DIR, RESULTS_DIR)
+    
+    print(env_kwargs)
 
     # Setup Environments and Callbacks
     train_env, eval_env, callback = setup_train_env(n_envs, env_kwargs, PATIENT_ID, CHECKPOINT_DIR, EVAL_LOG_DIR)
