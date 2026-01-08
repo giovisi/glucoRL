@@ -1,4 +1,6 @@
-# 🩸 Reinforcement Learning for Type 1 Diabetes Blood Glucose Control
+# glucoRL
+
+**Deep Reinforcement Learning for Type 1 Diabetes Blood Glucose Control**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
