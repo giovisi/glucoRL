@@ -1,28 +1,49 @@
+# RL for Type 1 Diabetes Blood Glucose Control
 
+Deep reinforcement learning for automated insulin delivery in T1D patients. A PPO agent learns to control an insulin pump using the SimGlucose simulator (FDA-approved virtual patient models).
 
-# Reinforcement Learning Project
+## What's in here
 
-This project provides a clean and modular implementation of fundamental Reinforcement Learning (RL) algorithms. It covers the full progression from basic bandits to deep RL and policy gradient methods.
+The `src/` folder contains all the code:
+- `train_ppo.py` – trains the PPO agent
+- `main.py` – compares RL vs Basal-Bolus vs PID controllers
+- `test_robustness.py` – stress tests (high carbs, skipped meals, etc.)
+- `custom_env.py` – Gymnasium environment wrapping SimGlucose
+- `reward_functions.py` – risk-based reward functions
 
-## Contents
+SimGlucose is included as a Git submodule.
 
-- **Bandits** – Greedy, ε-greedy, UCB  
-- **MDPs & Dynamic Programming** – Policy and value iteration  
-- **Monte Carlo & TD** – MC prediction/control, TD(0), Sarsa, Q-learning  
-- **Function Approximation** – Linear value/Q approximation  
-- **Policy Gradients** – REINFORCE, baseline variants  
-- **Actor–Critic** – Combined value + policy learning  
-- **Deep RL** – DQN with target networks and replay buffer
+## Setup
 
-## Run Examples
-
+```bash
+git clone --recurse-submodules <repo-url>
+conda env create -f environment.yml
+conda activate rl-proj
+cd simglucose && pip install -e . && cd ..
 ```
-python bandits/experiment_bandits.py
-python control/q_learning.py
-python policy_gradient/reinforce.py
-python deep_rl/cartpole_dqn.py
+
+## Running
+
+```bash
+# Train
+python src/train_ppo.py
+
+# Evaluate
+python src/main.py
+
+# Robustness tests
+python src/test_robustness.py
+
+# Monitor training
+tensorboard --logdir train/ppo_tensorboard
 ```
 
-## Goal
+## The agent
 
-Provide simple, readable implementations for studying and experimenting with RL methods.
+The "Smart" agent observes:
+- Last hour of glucose readings
+- Last hour of insulin delivery
+- Upcoming carbs in the next 2 hours (meal lookahead)
+
+Actions are continuous insulin rates, mapped exponentially to realistic values (0–3 U/hr).
+

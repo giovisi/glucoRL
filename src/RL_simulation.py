@@ -69,7 +69,8 @@ def simulate_RL(trial, scenario, PATIENT_ID, SIM_DAYS, MODEL_SEARCH_PATHS):
     env_rl = CustomT1DEnv(patient_name=PATIENT_ID, custom_scenario=scenario, episode_days=SIM_DAYS)
     
     # Load the pre-trained PPO model
-    model = PPO.load(model_path)
+    # Note: device='cpu' ensures cross-platform compatibility (macOS ARM <-> Windows x64)
+    model = PPO.load(model_path, device='cpu')
     
     # Reset environment and get initial observation
     obs, _ = env_rl.reset()

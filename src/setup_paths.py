@@ -18,11 +18,16 @@ Why is this needed?
 
 import os
 import sys
+import warnings
 
 
 # =============================================================================
 # ENVIRONMENT FIXES
 # =============================================================================
+
+# Suppress deprecation warning from simglucose's internal gym import
+# (simglucose uses the old OpenAI Gym which triggers a pkg_resources warning)
+warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
 
 # Fix OpenMP duplicate library issue on macOS
 # This occurs when both NumPy and PyTorch load their own OpenMP libraries

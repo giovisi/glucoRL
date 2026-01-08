@@ -24,8 +24,8 @@ from custom_env import CustomT1DEnv
 from simglucose.simulation.scenario import CustomScenario
 import random
 
-# Set working directory to script location for relative path resolution
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+# Set working directory to project root for relative path resolution
+os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 # =============================================================================
@@ -119,7 +119,7 @@ def get_scenarios():
 # METRICS ANALYSIS
 # =============================================================================
 
-def analyze_episode(df):
+def analyse_episode(df):
     """
     Calculate detailed clinical glycaemic metrics for an episode.
     
@@ -195,7 +195,7 @@ def plot_scenarios_grid(results, output_folder):
         ax.fill_between(df.index, 70, 180, color='green', alpha=0.1)  # Target range
         
         # Add title with key metrics
-        metrics = analyze_episode(df)
+        metrics = analyse_episode(df)
         title = f"{name}\nTIR: {metrics['TIR']:.1f}% | TBR: {metrics['TBR']:.1f}% | Mean: {metrics['Mean BG']:.0f}"
         ax.set_title(title, fontweight='bold', fontsize=10)
         ax.grid(True, alpha=0.3)
@@ -234,8 +234,9 @@ def main():
     print(f"Output: {OUTPUT_FOLDER}")
 
     # Load trained model
+    # Note: device='cpu' ensures cross-platform compatibility (macOS ARM <-> Windows x64)
     try:
-        model = PPO.load(MODEL_PATH)
+        model = PPO.load(MODEL_PATH, device='cpu')
     except Exception as e:
         print(f"Error loading model: {e}")
         return
@@ -287,7 +288,7 @@ def main():
         df.to_csv(os.path.join(OUTPUT_FOLDER, f"{name}.csv"))
         
         # Calculate and record metrics
-        m = analyze_episode(df)
+        m = analyse_episode(df)
         line = f"{name:<15} | {m['TIR']:>7.1f}  | {m['TBR']:>7.1f}  | {m['TAR']:>7.1f}  | {m['Mean BG']:>6.0f} | {m['CV']:>6.1f}"
         report_lines.append(line)
         print(f"  -> TIR: {m['TIR']:.1f}%")
