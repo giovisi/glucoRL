@@ -87,15 +87,14 @@ Based on the Blood Glucose Risk Index (Kovatchev et al.), our reward function:
 ```bash
 # Clone the repository with submodules
 git clone --recurse-submodules <repo-url>
-cd RL-Project
+cd glucoRL
 
 # Create and activate the conda environment
 conda env create -f environment.yml
-conda activate rl-proj
-
-# Install SimGlucose in development mode
-cd simglucose && pip install -e . && cd ..
+conda activate gluco-rl
 ```
+
+> **Note:** SimGlucose is included as a Git submodule and does **not** need to be installed separately. The project's `setup_paths.py` module automatically adds it to the Python path at runtime.
 
 ---
 
