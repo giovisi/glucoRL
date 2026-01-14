@@ -23,3 +23,6 @@ ppo_*/
 
 # Robustness analysis data
 test/robustness/
+
+# Ignore project presentation
+docs/glucoRL_presentation.pdf

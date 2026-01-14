@@ -79,7 +79,7 @@ Based on the Blood Glucose Risk Index (Kovatchev et al.), our reward function:
 ## ⚙️ Installation
 
 ### Prerequisites
-- [Miniconda](https://docs.conda.io/en/latest/miniconda.html) or Anaconda
+- [Miniconda](https://docs.conda.io/en/latest/miniconda.html) or [Anaconda](https://www.anaconda.com/docs/getting-started/anaconda/main)
 - Git
 
 ### Setup

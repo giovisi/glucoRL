@@ -66,7 +66,7 @@ def simulate_RL(trial, scenario, PATIENT_ID, SIM_DAYS, MODEL_SEARCH_PATHS):
     # ENVIRONMENT SETUP
     # =========================================================================
     # Create custom environment with the specified scenario and patient
-    env_rl = CustomT1DEnv(patient_name=PATIENT_ID, custom_scenario=scenario, episode_days=SIM_DAYS)
+    env_rl = CustomT1DEnv(patient_name=PATIENT_ID, custom_scenario=scenario, episode_days=SIM_DAYS, seed=trial)
     
     # Load the pre-trained PPO model
     # Note: device='cpu' ensures cross-platform compatibility (macOS ARM <-> Windows x64)

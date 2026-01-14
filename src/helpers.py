@@ -7,7 +7,7 @@ This module provides utility functions for:
 - Saving simulation results to files
 - Performing advanced statistical analysis
 
-All visualisations follow clinical standards for blood glucose zones.
+
 """
 
 import matplotlib.pyplot as plt
@@ -62,7 +62,7 @@ def plot_comparison(results_dict, patient_id="Unknown", save_path=None):
     """
     Generate comparative visualisation plots with multiple subplots.
     
-    Creates a comprehensive figure showing:
+    Creates a figure showing:
     - Time series of blood glucose for each controller method
     - Violin plot distribution comparison across all methods
     - Target range highlighting and key metrics in titles
@@ -130,7 +130,7 @@ def plot_comparison(results_dict, patient_id="Unknown", save_path=None):
 
     # =========================================================================
     # VIOLIN PLOT SUBPLOT: Distribution comparison across all methods
-    # Shows density of glucose values - narrower violin = more stable control
+    # Shows density of glucose values. The narrower violin the more stable is the control
     # =========================================================================
     ax_violin = fig.add_subplot(gs[:, 1])
     
@@ -176,6 +176,7 @@ def plot_comparison(results_dict, patient_id="Unknown", save_path=None):
         print(f"[PLOT] Saved to: {save_path}")
     
     plt.show()
+    
 
 
 # =============================================================================
@@ -260,6 +261,113 @@ def plot_glycemic_zones_pie(results_dict, save_path=None):
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
     
     plt.show()
+
+import os
+from datetime import datetime
+import matplotlib.pyplot as plt
+
+def plot_time_series(results_dict, meals, save_folder,patient_id="Unknown", save=True):
+    
+
+    # ==============================================================
+    # Create figure
+    # ==============================================================
+    fig, ax = plt.subplots(figsize=(16, 8))
+
+    # Colour palette for different control methods
+    colors = {
+        'Basal-Bolus': '#1f77b4',
+        'PID': '#ff7f0e',
+        'RL Smart': '#2ca02c'
+    }
+
+    # ==============================================================
+    # Plot BG time series
+    # ==============================================================
+    for name, df in results_dict.items():
+        BG = df['BG'].values
+
+        tir = ((BG >= 70) & (BG <= 180)).sum() / len(BG) * 100
+        mean_bg = BG.mean()
+
+        ax.plot(
+            df.index,
+            BG,
+            linewidth=1.8,
+            color=colors.get(name, 'black'),
+            alpha=0.85,
+            label=f"{name} | TIR {tir:.1f}% | Mean {mean_bg:.1f}"
+        )
+
+    # ==============================================================
+    # Clinical thresholds
+    # ==============================================================
+    ax.axhline(180, color='red', linestyle='--', linewidth=1, alpha=0.4)
+    ax.axhline(70, color='red', linestyle='--', linewidth=1, alpha=0.4)
+    ax.axhline(250, color='darkred', linestyle=':', linewidth=1, alpha=0.3)
+    ax.axhline(54, color='darkred', linestyle=':', linewidth=1, alpha=0.3)
+
+    # Target range shading
+    t = list(results_dict.values())[0].index
+    ax.fill_between(t, 70, 180, color='green', alpha=0.12, label='Target Range')
+
+    # ==============================================================
+    # Meal vertical lines + carb annotations
+    # ==============================================================
+    t0 = t[0]  # simulation start time
+
+    for meal_time, carbs, meal_name in meals:
+        meal_timestamp = t0 + meal_time
+
+        # Vertical line
+        ax.axvline(
+            meal_timestamp,
+            color='purple',
+            linestyle='--',
+            linewidth=1.2,
+            alpha=0.7
+        )
+
+        # Annotation (carbs)
+        ax.text(
+            meal_timestamp,
+            ax.get_ylim()[1] - 15,
+            f"{meal_name}\n{carbs} g",
+            rotation=90,
+            verticalalignment='top',
+            horizontalalignment='right',
+            fontsize=9,
+            color='purple',
+            alpha=0.9
+        )
+
+    # ==============================================================
+    # Plot styling
+    # ==============================================================
+    ax.set_title(f'Blood Glucose Profiles – Patient {patient_id}',
+                 fontsize=14, fontweight='bold')
+    ax.set_ylabel('Glucose (mg/dL)', fontsize=11)
+    ax.set_xlabel('Time', fontsize=11)
+    ax.set_ylim([40, 400])
+    ax.grid(True, linestyle=':', alpha=0.4)
+
+    ax.legend(fontsize=10, loc='upper right', frameon=True)
+
+    plt.tight_layout()
+
+    # ==============================================================
+    # Save figure
+    # ==============================================================
+
+
+    if save:
+
+        folder = save_folder
+        
+        plt.savefig(save_folder, dpi=300, bbox_inches='tight')
+
+    plt.show()
+
 
 
 # =============================================================================
